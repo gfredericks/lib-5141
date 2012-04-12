@@ -1,5 +1,6 @@
 (ns lib-5141.core
   (:use lamina.core aleph.http)
+  (:use lib-5141.util)
   #_(:use [clojure.core.match :only [match]])
   (:require [clj-http
              [client :as client]
@@ -93,6 +94,7 @@
                                response))
                     (catch Throwable t
                       (prn "RETURNING ERROR RESPONSE")
+                      (.printStackTrace t)
                       {:status 500 :body (str t)}))))
        (close ch))
      {:port listen-port})))

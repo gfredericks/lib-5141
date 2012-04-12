@@ -1,11 +1,13 @@
 (ns lib-5141.test.core
+  (:import java.net.URL)
   (:require [clojure.java.io :as io]
             [fs.core :as fs]
-            [compojure.route :as route]
-            [compojure.core :as ccore]
+            #_[compojure.core :as ccore]
             [ring.adapter.jetty :as jet])
-  (:use [lib-5141.core])
-  (:use [clojure.test]))
+  (:use [lib-5141.core]
+        [clojure.test]
+        compojure.route
+        compojure.core))
 
 (defn- write-big-file
   "Spits a megabyte of random data into a file."
@@ -27,12 +29,13 @@
 
 (defmacro with-test-server [& body] `(with-test-server* (fn [] ~@body)))
 
-(def first-arg-identity (fn [a & bs] a))
+(defn forward-identity [a] [:forward a])
+(defn first-arg-identity [a & bs] a)
 
 (deftest identity-test
   (with-test-server
     (let [stopper (start-proxy-server "localhost" 35375 35376
-                                     identity
+                                     forward-identity
                                      first-arg-identity)]
       (try
         (-> "http://localhost:35376/foo"
