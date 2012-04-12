@@ -3,7 +3,8 @@
   (:require [clojure.java.io :as io]
             [fs.core :as fs]
             #_[compojure.core :as ccore]
-            [ring.adapter.jetty :as jet])
+            [ring.adapter.jetty :as jet]
+            [clj-http.client :as client])
   (:use [lib-5141.core]
         [clojure.test]
         compojure.route
@@ -18,7 +19,8 @@
 
 (defroutes test-server
   (GET "/foo" [] "hey folks")
-  (GET "/bar" [] "you touched my bar"))
+  (GET "/bar" [] "you touched my bar")
+  (POST "/upload" [] "thanks for the file kid"))
 
 (defn with-test-server*
   [func]
@@ -32,15 +34,28 @@
 (defn forward-identity [a] [:forward a])
 (defn first-arg-identity [a & bs] a)
 
+(defmacro with-proxy-server
+  [req-fn resp-fn & body]
+  `(let [stopper# (start-proxy-server "localhost" 35375 35376 ~req-fn ~resp-fn)]
+     (try ~@body (finally (stopper#)))))
+
 (deftest identity-test
-  (with-test-server
-    (let [stopper (start-proxy-server "localhost" 35375 35376
-                                     forward-identity
-                                     first-arg-identity)]
-      (try
-        (-> "http://localhost:35376/foo"
-            URL.
-            slurp
-            (= "hey folks")
-            (is))
-        (finally (stopper))))))
+  (with-proxy-server forward-identity first-arg-identity
+    (-> "http://localhost:35376/foo"
+        URL.
+        slurp
+        (= "hey folks")
+        (is))))
+
+(deftest little-file-test
+  (with-proxy-server forward-identity first-arg-identity
+    (fs/with-dir (fs/temp-dir)
+      (spit (fs/file "foo.txt") "not much content")
+      (-> "http://localhost:35376/upload"
+          (client/post
+           {:multipart [["title" "Foo"]
+                        ["Content/type" "text/plain"]
+                        ["file" (fs/file "foo.txt")]]})
+          :body
+          (= "thanks for the file kid")
+          (is)))))
