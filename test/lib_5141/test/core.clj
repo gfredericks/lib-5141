@@ -40,7 +40,7 @@
      (try ~@body (finally (stopper#)))))
 
 (deftest identity-test
-  (with-test-server*
+  (with-test-server
     (with-proxy-server forward-identity first-arg-identity
       (-> "http://localhost:35376/foo"
           URL.
@@ -49,7 +49,7 @@
           (is)))))
 
 (deftest little-file-test
-  (with-test-server*
+  (with-test-server
     (with-proxy-server forward-identity first-arg-identity
       (fs/with-dir (fs/temp-dir)
         (spit (fs/file "foo.txt") "not much content")
