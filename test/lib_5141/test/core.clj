@@ -40,22 +40,24 @@
      (try ~@body (finally (stopper#)))))
 
 (deftest identity-test
-  (with-proxy-server forward-identity first-arg-identity
-    (-> "http://localhost:35376/foo"
-        URL.
-        slurp
-        (= "hey folks")
-        (is))))
+  (with-test-server*
+    (with-proxy-server forward-identity first-arg-identity
+      (-> "http://localhost:35376/foo"
+          URL.
+          slurp
+          (= "hey folks")
+          (is)))))
 
 (deftest little-file-test
-  (with-proxy-server forward-identity first-arg-identity
-    (fs/with-dir (fs/temp-dir)
-      (spit (fs/file "foo.txt") "not much content")
-      (-> "http://localhost:35376/upload"
-          (client/post
-           {:multipart [["title" "Foo"]
-                        ["Content/type" "text/plain"]
-                        ["file" (fs/file "foo.txt")]]})
-          :body
-          (= "thanks for the file kid")
-          (is)))))
+  (with-test-server*
+    (with-proxy-server forward-identity first-arg-identity
+      (fs/with-dir (fs/temp-dir)
+        (spit (fs/file "foo.txt") "not much content")
+        (-> "http://localhost:35376/upload"
+            (client/post
+             {:multipart [["title" "Foo"]
+                          ["Content/type" "text/plain"]
+                          ["file" (fs/file "foo.txt")]]})
+            :body
+            (= "thanks for the file kid")
+            (is))))))
