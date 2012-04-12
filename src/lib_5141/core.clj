@@ -1,28 +1,8 @@
 (ns lib-5141.core
   (:use lamina.core aleph.http)
   (:use lib-5141.util)
-  #_(:use [clojure.core.match :only [match]])
-  (:require [clj-http
-             [client :as client]
-             [core :as http-core]]))
+  #_(:use [clojure.core.match :only [match]]))
 
-
-(def #^:private request
-  (-> http-core/request
-      client/wrap-query-params
-      client/wrap-user-info
-      client/wrap-url
-      client/wrap-redirects
-      client/wrap-decompression
-      client/wrap-input-coercion
-      client/wrap-output-coercion
-      client/wrap-exceptions
-      client/wrap-basic-auth
-      client/wrap-accept
-      client/wrap-accept-encoding
-      client/wrap-content-type
-      client/wrap-form-params
-      client/wrap-method))
 
 ;; The API here doesn't seem obvious...we want to support at
 ;; least 2 use cases, and the user should be able to choose
@@ -58,6 +38,7 @@
    request-fn
    response-fn]
   (let [forward-request
+        ;; returns an aleph channel
         (fn [req]
           (-> req
               (assoc :server-port forward-port
@@ -65,28 +46,35 @@
                      :throw-exceptions false
                      :follow-redirects false
                      :method (:request-method req))
-              (request)
-              (->> (into {}))))
+              (http-request)))
         response-fn (or response-fn (fn [a b] a))]
     (start-http-server
      (fn [ch request]
        (let [request (into {} request)
-             request (request-fn request)]
-         (enqueue ch
-                  (try
-                    (let [[action thing] request]
-                      (cond (= :forward action) (-> thing forward-request (response-fn thing))
-                            (= :respond action) thing))
-                    ;; I __think__ this wasn't working...?
-                    #_(match request
-                           [:forward new-req] 
-                           (let [response (response-fn (forward-request new-req) new-req)]
-                             response)
-                           [:respond response]
-                           response)
-                    (catch Throwable t
-                      (prn "RETURNING ERROR RESPONSE")
-                      (.printStackTrace t)
-                      {:status 500 :body (str t)}))))
+             request (request-fn request)
+             return-response (partial enqueue ch)
+             return-error (fn [e]
+                            (prn "RETURNING ERROR RESPONSE")
+                            (.printStackTrace e)
+                            (return-response {:status 500 :body (str e)}))]
+         (try
+           (let [[action thing] request]
+             (cond (= :forward action)
+                   (let [response-channel (forward-request thing)]
+                     (on-success response-channel
+                                 (fn [resp]
+                                   (-> resp
+                                       response-fn
+                                       return-response
+                                       (try (catch Throwable t (return-error t)))))))
+                   (= :respond action) (enqueue ch thing)))
+           ;; I __think__ this wasn't working...?
+           #_(match request
+                    [:forward new-req]
+                    (let [response (response-fn (forward-request new-req) new-req)]
+                      response)
+                    [:respond response]
+                    response)
+           (catch Throwable t (return-error t))))
        (close ch))
      {:port listen-port})))
