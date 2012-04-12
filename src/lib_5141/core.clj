@@ -66,14 +66,10 @@
                      :follow-redirects false
                      :method (:request-method req))
               (request)
-              (->> (into {}))
-              ((fn [resp]
-                 (print "got response back from server")
-                 resp))))
+              (->> (into {}))))
         response-fn (or response-fn (fn [a b] a))]
     (start-http-server
      (fn [ch request]
-       (prn "GETTING REQUEST FOR" (:uri request) (:request-method request))
        (let [request (into {} request)
              request (request-fn request)]
          (enqueue ch
@@ -85,13 +81,9 @@
                     #_(match request
                            [:forward new-req] 
                            (let [response (response-fn (forward-request new-req) new-req)]
-                             (println "INDIRECT RESPONSE")
-                             (prn response)
                              response)
                            [:respond response]
-                           (do (println "DIRECT RESPONSE")
-                               (prn response)
-                               response))
+                           response)
                     (catch Throwable t
                       (prn "RETURNING ERROR RESPONSE")
                       (.printStackTrace t)
