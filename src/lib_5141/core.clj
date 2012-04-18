@@ -1,5 +1,4 @@
 (ns lib-5141.core
-  (:import org.jboss.netty.buffer.ChannelBuffer)
   (:use lamina.core aleph.http))
 
 (defn start-proxy-server
