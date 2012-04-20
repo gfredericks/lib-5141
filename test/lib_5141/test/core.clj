@@ -92,11 +92,11 @@
   (with-proxy-server session-proxy
     (binding [clj-http.core/*cookie-store* (clj-http.cookies/cookie-store)]
       ;; setting the key has an effect
-      (is (= (client/get "http://localhost:35376/farm")
+      (is (= (:body (client/get "http://localhost:35376/farm"))
              "nil"))
-      (is (= (client/put "http://localhost:35376/farm/cows")))
-      (is (= (client/get "http://localhost:35376/farm")
+      (is (= (:body (client/put "http://localhost:35376/farm/cows"))))
+      (is (= (:body (client/get "http://localhost:35376/farm"))
              "\"cows\"")))
     ;; but not to clients without the cookie
-    (is (= (client/get "http://localhost:35376/farm")
+    (is (= (:body (client/get "http://localhost:35376/farm"))
              "nil"))))
