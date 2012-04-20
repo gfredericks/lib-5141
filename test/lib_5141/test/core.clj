@@ -2,8 +2,9 @@
   (:import java.net.URL)
   (:require [fs.core :as fs]
             [ring.adapter.jetty :as jet]
-            [clj-http.client :as client])
+            [clj-http core cookies [client :as client]])
   (:use lib-5141.core
+        lib-5141.sessions
         clojure.test
         compojure.route
         compojure.core))
@@ -74,3 +75,28 @@
               :body
               (= "thanks for the file kid")
               (is)))))))
+
+(defroutes session-server
+  (PUT "/:key/:value" [key value]
+       (session-put! key value)
+       "okay")
+  (GET "/:key" [key]
+       (pr-str (session-get key))))
+
+;; A silly proxy that never forwards anything and just acts like the
+;; above session-server
+(def session-proxy
+  {:request-fn (fn [req] [:respond (session-server req)])})
+
+(deftest session-test
+  (with-proxy-server session-proxy
+    (binding [clj-http.core/*cookie-store* (clj-http.cookies/cookie-store)]
+      ;; setting the key has an effect
+      (is (= (client/get "http://localhost:35376/farm")
+             "nil"))
+      (is (= (client/put "http://localhost:35376/farm/cows")))
+      (is (= (client/get "http://localhost:35376/farm")
+             "\"cows\"")))
+    ;; but not to clients without the cookie
+    (is (= (client/get "http://localhost:35376/farm")
+             "nil"))))
