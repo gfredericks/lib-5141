@@ -2,7 +2,8 @@
   (:import java.net.URL)
   (:require [fs.core :as fs]
             [ring.adapter.jetty :as jet]
-            [clj-http.client :as client])
+            [clj-http.client :as client]
+            [clojure.string :as s])
   (:use lib-5141.core
         clojure.test
         compojure.route
@@ -18,12 +19,13 @@
                 (-> body slurp count))))
 
 (defn with-test-server*
-  [func]
-  (let [s (jet/run-jetty test-server {:port 35375, :join? false})]
-    (try
-      (Thread/sleep 2000)
-      (func)
-      (finally (.stop s)))))
+  ([func] (with-test-server* test-server func))
+  ([server func]
+     (let [s (jet/run-jetty server {:port 35375, :join? false})]
+       (try
+         (Thread/sleep 2000)
+         (func)
+         (finally (.stop s))))))
 
 (defmacro with-test-server [& body] `(with-test-server* (fn [] ~@body)))
 
@@ -74,3 +76,22 @@
               :body
               (= "thanks for the file kid")
               (is)))))))
+
+(def inspector-server
+  (fn [req]
+    (let [req (assoc req :body (-> req :body slurp))]
+      {:status 200
+       :body (pr-str req)})))
+
+(deftest host-header-test
+  (with-test-server* inspector-server
+    (fn []
+      (with-proxy-server {}
+        (let [hosts (-> "http://localhost:35376/foo/bar"
+                        URL.
+                        slurp
+                        read-string
+                        :headers
+                        (get "host")
+                        (s/split #","))]
+          (is (= 1 (count hosts))))))))
