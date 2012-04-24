@@ -27,6 +27,7 @@
                         :follow-redirects false
                         :method (:request-method req)
                         :scheme (-> req :scheme name))
+                 (update-in [:headers] dissoc "host")
                  (http-request)))]
        (start-http-server
         (fn [ch request]
