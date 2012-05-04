@@ -1,4 +1,4 @@
-(defproject com.gfredericks/lib-5141 "0.2.0"
+(defproject com.gfredericks/lib-5141 "0.2.1"
   :description "Basic http proxy backed by Aleph"
   :dependencies [[org.clojure/clojure "1.3.0"]
                  [aleph "0.2.1-beta2"]]

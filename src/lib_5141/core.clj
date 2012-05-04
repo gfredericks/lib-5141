@@ -46,7 +46,8 @@
      (start-http-server
       (fn [ch request]
         (let [request (into {} request)
-              request-fn (when-not (or request-fn async-request-fn)
+              request-fn (if (or request-fn async-request-fn)
+                           request-fn
                            (fn [a] [:forward a]))
               return-response (partial enqueue-and-close ch)
               return-error (fn [e]

@@ -96,6 +96,20 @@
                         (s/split #","))]
           (is (= 1 (count hosts))))))))
 
+(deftest request-fn-test
+  (with-test-server* inspector-server
+    (fn []
+      (with-proxy-server {:request-fn (fn [req]
+                                        [:forward (assoc-in req [:headers "foo"] "bar")])}
+        (-> "http://localhost:35376/foo/bar"
+            URL.
+            slurp
+            read-string
+            :headers
+            (get "foo")
+            (= "bar")
+            (is))))))
+
 (deftest async-test
   (let [reqs (atom [])
         test-server (fn [{:keys [request-method uri]}]
