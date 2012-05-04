@@ -95,3 +95,25 @@
                         (get "host")
                         (s/split #","))]
           (is (= 1 (count hosts))))))))
+
+(deftest async-test
+  (let [reqs (atom [])
+        test-server (fn [{:keys [request-method uri]}]
+                      (swap! reqs conj [request-method uri])
+                      {:status 200 :body "ok"})
+        forwarder-atom (atom nil)
+        proxy-req (fn [req forwarder replier]
+                    (reset! forwarder-atom [req forwarder]))]
+    (with-test-server* test-server
+      (fn []
+        (with-proxy-server {:async-request-fn proxy-req}
+          (future (-> "http://localhost:35376/foo/bar"
+                      URL.
+                      slurp))
+          (is (empty? @reqs))
+          (Thread/sleep 50)
+          (is (empty? @reqs))
+          (let [[req forwarder] @forwarder-atom]
+            (forwarder req))
+          (Thread/sleep 50)
+          (is (= [[:get "/foo/bar"]] @reqs)))))))
