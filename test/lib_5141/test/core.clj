@@ -35,6 +35,13 @@
      (Thread/sleep 1000)
      (try ~@body (finally (stopper#)))))
 
+(defmacro with-sync-proxy-server
+  [opts & body]
+  `(let [handler# (ring-handler "localhost" 35375 ~opts)
+         s# (jet/run-jetty handler# {:port 35376, :join? false})]
+     (Thread/sleep 2000)
+     (try ~@body (finally (.stop s#)))))
+
 (deftest identity-test
   (with-test-server
     (with-proxy-server {}
@@ -101,6 +108,20 @@
     (fn []
       (with-proxy-server {:request-fn (fn [req]
                                         [:forward (assoc-in req [:headers "foo"] "bar")])}
+        (-> "http://localhost:35376/foo/bar"
+            URL.
+            slurp
+            read-string
+            :headers
+            (get "foo")
+            (= "bar")
+            (is))))))
+
+(deftest sync-request-fn-test
+  (with-test-server* inspector-server
+    (fn []
+      (with-sync-proxy-server {:request-fn (fn [req]
+                                             [:forward (assoc-in req [:headers "foo"] "bar")])}
         (-> "http://localhost:35376/foo/bar"
             URL.
             slurp

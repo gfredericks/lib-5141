@@ -1,4 +1,6 @@
 (ns lib-5141.core
+  (:import org.jboss.netty.buffer.ChannelBuffer
+           java.io.ByteArrayInputStream)
   (:use lamina.core aleph.http))
 
 (defn- forward-request
@@ -82,3 +84,20 @@
      (start-http-server
       (async-handler forward-host forward-port opts)
       {:port listen-port})))
+
+(defn- aleph-body->input-stream
+  [body]
+  (cond (instance? ChannelBuffer body)
+        (-> body .array ByteArrayInputStream.)))
+
+(defn ring-handler
+  "Returns a synchronous ring handler, defeating the entire purpose of
+  using aleph. opts are same as start-proxy-server"
+  ([forward-host forward-port] (ring-handler forward-host forward-port {}))
+  ([forward-host forward-port opts]
+     (let [h (async-handler forward-host forward-port opts)]
+       (fn [req]
+         (let [c (channel)]
+           (h c req)
+           (try (-> c read-channel deref (update-in [:body] aleph-body->input-stream))
+                (finally (close c))))))))
