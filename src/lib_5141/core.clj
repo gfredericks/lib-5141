@@ -14,6 +14,48 @@
       (update-in [:headers] dissoc "host")
       (http-request)))
 
+(defn async-handler
+  [forward-host
+   forward-port
+   {:keys [request-fn response-fn async-request-fn]
+    :or {response-fn (fn [a b] a)}}]
+  {:pre [(not (and request-fn async-request-fn))]}
+  (fn [ch request]
+    (let [request (into {} request)
+          request-fn (if (or request-fn async-request-fn)
+                       request-fn
+                       (fn [a] [:forward a]))
+          return-response (partial enqueue-and-close ch)
+          return-error (fn [e]
+                         (prn "RETURNING ERROR RESPONSE" (str e))
+                         (.printStackTrace e)
+                         (return-response {:status 500 :body (str e)}))
+          forward (fn [req]
+                    (let [response-channel (forward-request forward-host forward-port req)]
+                      (on-success response-channel
+                                  (fn [resp]
+                                    (-> resp
+                                        (response-fn req)
+                                        return-response
+                                        (try (catch Throwable t (return-error t))))))))]
+      (try
+        (if request-fn
+          (let [[action thing] (request-fn request)]
+            (cond (= :forward action) (forward thing)
+                  (= :respond action) (return-response thing)
+                  :else (throw (Exception. "Bad return value from request-fn."))))
+          (let [called (atom 0)
+                limit-calls (fn [func]
+                              (fn [arg]
+                                (if (> (swap! called inc) 1)
+                                  (throw (Exception. "Called forward/reply functions more than once!"))
+                                  (func arg))))]
+            (async-request-fn
+             request
+             (limit-calls forward)
+             (limit-calls return-response))))
+        (catch Throwable t (return-error t))))))
+
 (defn start-proxy-server
   "Three options are available:
 
@@ -36,47 +78,7 @@
 
   It is an error to supply both a request-fn and an async-request-fn"
   ([a b c] (start-proxy-server a b c {}))
-  ([forward-host
-    forward-port
-    listen-port
-    {:keys [request-fn response-fn async-request-fn]
-     :or {#_request-fn #_(fn [a] [:forward a])
-          response-fn (fn [a b] a)}}]
-     (assert (not (and request-fn async-request-fn)))
+  ([forward-host forward-port listen-port opts]
      (start-http-server
-      (fn [ch request]
-        (let [request (into {} request)
-              request-fn (if (or request-fn async-request-fn)
-                           request-fn
-                           (fn [a] [:forward a]))
-              return-response (partial enqueue-and-close ch)
-              return-error (fn [e]
-                             (prn "RETURNING ERROR RESPONSE" (str e))
-                             (.printStackTrace e)
-                             (return-response {:status 500 :body (str e)}))
-              forward (fn [req]
-                        (let [response-channel (forward-request forward-host forward-port req)]
-                          (on-success response-channel
-                                      (fn [resp]
-                                        (-> resp
-                                            (response-fn req)
-                                            return-response
-                                            (try (catch Throwable t (return-error t))))))))]
-          (try
-            (if request-fn
-              (let [[action thing] (request-fn request)]
-                (cond (= :forward action) (forward thing)
-                      (= :respond action) (return-response thing)
-                      :else (throw (Exception. "Bad return value from request-fn."))))
-              (let [called (atom 0)
-                    limit-calls (fn [func]
-                                  (fn [arg]
-                                    (if (> (swap! called inc) 1)
-                                      (throw (Exception. "Called forward/reply functions more than once!"))
-                                      (func arg))))]
-                (async-request-fn
-                 request
-                 (limit-calls forward)
-                 (limit-calls return-response))))
-            (catch Throwable t (return-error t)))))
+      (async-handler forward-host forward-port opts)
       {:port listen-port})))
