@@ -3,7 +3,8 @@
   (:require [fs.core :as fs]
             [ring.adapter.jetty :as jet]
             [clj-http.client :as client]
-            [clojure.string :as s])
+            [clojure.string :as s]
+            [clojure.java.io :as io])
   (:use lib-5141.core
         clojure.test
         compojure.route
@@ -129,6 +130,21 @@
             :headers
             (get "foo")
             (= "bar")
+            (is))))))
+
+(def big-response-server
+  (fn [req] {:status 200 :body (pr-str (range 1000000))}))
+
+(deftest sync-request-fn-test
+  (with-test-server* big-response-server
+    (fn []
+      (with-sync-proxy-server {}
+        (-> "http://localhost:35376/foo/bar"
+            URL.
+            io/reader
+            java.io.PushbackReader.
+            read
+            (= (range 1000000))
             (is))))))
 
 (deftest async-test

@@ -1,6 +1,7 @@
 (ns lib-5141.core
   (:import org.jboss.netty.buffer.ChannelBuffer
-           java.io.ByteArrayInputStream)
+           java.io.ByteArrayInputStream
+           java.io.SequenceInputStream)
   (:use lamina.core aleph.http))
 
 (defn- forward-request
@@ -85,10 +86,37 @@
       (async-handler forward-host forward-port opts)
       {:port listen-port})))
 
+(defn- seq->enumeration
+  [coll]
+  (let [state (ref coll)]
+    (reify java.util.Enumeration
+      (hasMoreElements [this] (not (empty? @state)))
+      (nextElement [this]
+        (dosync
+         (let [x (first @state)]
+           (alter state rest)
+           x))))))
+
+(defn- byte-arrays->input-stream
+  [byte-arrays]
+  (->> byte-arrays
+       (map #(ByteArrayInputStream. %))
+       seq->enumeration
+       SequenceInputStream.))
+
 (defn- aleph-body->input-stream
   [body]
   (cond (instance? ChannelBuffer body)
-        (-> body .array ByteArrayInputStream.)))
+        (-> body .array ByteArrayInputStream.)
+
+        (channel? body)
+        ;; wrap the buffer-channel in an input stream
+        (->> body
+             lazy-channel-seq
+             (map (memfn array))
+             byte-arrays->input-stream)
+
+        :else (throw (Exception. (str "Unknown body type: " (type body))))))
 
 (defn ring-handler
   "Returns a synchronous ring handler, defeating the entire purpose of
