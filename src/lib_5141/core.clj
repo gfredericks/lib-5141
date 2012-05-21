@@ -4,6 +4,16 @@
            java.io.SequenceInputStream)
   (:use lamina.core aleph.http))
 
+(defn fix-body
+  "If body is a string, convert it to a channel like aleph likes."
+  [body]
+  (if (string? body)
+    (let [c (channel)]
+      (enqueue c body)
+      (close c)
+      c)
+    body))
+
 (defn- forward-request
   [forward-host forward-port req]
   (-> req
@@ -15,7 +25,8 @@
              :method (:request-method req)
              :scheme (-> req :scheme name))
       (update-in [:headers] dissoc "host")
-      (http-request)))
+      (update-in [:body] fix-body)
+      http-request))
 
 (defn async-handler
   [forward-host
@@ -115,6 +126,9 @@
              lazy-channel-seq
              (map (memfn array))
              byte-arrays->input-stream)
+
+        (instance? java.io.InputStream body)
+        body
 
         :else (throw (Exception. (str "Unknown body type: " (type body))))))
 
